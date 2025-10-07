@@ -58,5 +58,9 @@ QUESTION 3
 readLines("Firmicutes_ASVs.fa")[1:10]
 readLines("Actinobacteria_ASVs.fa")[1:10]
 ```
-
-
+ ![BLAST nr database query for Actinobacteria part1](/Users/ipaz00/Desktop/scnsht.png) 
+ ![BLAST nr database query for Actinobacteria part2 sorted by query cover](/Users/ipaz00/Desktop/drougth.png) 
+ ![BLAST nr database query for Firmicutes part1](/Users/ipaz00/Desktop/g.png)
+ 
+ 
+ ![BLAST nr database query for Firmicutes part2 sorted by e value](/Users/ipaz00/Desktop/gh.png)
