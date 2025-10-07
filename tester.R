@@ -61,3 +61,94 @@ min(out2$reads.out)
 errF <- learnErrors(filtFs, multithread=T)
 errR <- learnErrors(filtRs, multithread=T)
 plotErrors(errF, nominalQ=TRUE)
+plotErrors(errR, nominalQ=TRUE)
+dadaFs <- dada(filtFs, err=errF, multithread = TRUE)
+dadaRs <- dada(filtRs, err=errF, multithread = TRUE)
+dadaFs[[1]]
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
+
+# Inspect the merger data.frame from the first sample
+DT::datatable(mergers$F3D0,options = list(scrollX = TRUE, autoWidth = TRUE))
+seqtab <- makeSequenceTable(mergers)
+
+dim(seqtab)
+table(nchar(getSequences(seqtab)))
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=F, verbose=TRUE)
+#Proportion ASVs were removed due to chimeras?
+100-(dim(seqtab.nochim)[2]/dim(seqtab)[2]*100)
+sum(seqtab.nochim)/sum(seqtab)*100
+# function that sums the number of unique occurrences in this case seqs
+getN <- function(x){ 
+  
+  sum(getUniques(x))
+  
+}
+
+#Using apply to run the function on all list elements.
+track <- cbind(out, sapply(dadaFs, getN), sapply(dadaRs, getN), sapply(mergers, getN), rowSums(seqtab.nochim))
+
+#adding colnames
+colnames(track) <- c("input", "filtered", "denoisedF", "denoisedR", "merged", "nonchim")
+
+#Adding row names
+rownames(track) <- sample.names
+
+track <- as.data.frame(track) %>% mutate(prop_kept = round(nonchim/input*100,2))
+
+DT::datatable(track)
+ASV_tbl <- as.data.frame(seqtab.nochim) %>% 
+  `colnames<-`(base::paste("ASV", seq(1:ncol(seqtab.nochim)), sep = ""))
+
+DT::datatable(ASV_tbl, options = list(scrollX = TRUE, autoWidth = TRUE))
+ASV_tbl <- as.data.frame(t(ASV_tbl[-nrow(ASV_tbl),]))
+
+#lets remove the ASVs that were only present in the mock communities
+
+ASV_tbl <- ASV_tbl %>% mutate(rs = rowSums(ASV_tbl)) %>% 
+  filter(rs > 0) %>% dplyr::select(-rs)
+#Using DNAStringSet from Biostrings to read the seqs 
+ASV_seqs <- DNAStringSet(base::colnames(seqtab.nochim) %>% 
+                           `names<-`(base::paste("ASV",seq(1:ncol(seqtab.nochim)),sep = "")))
+taxa <- assignTaxonomy(seqtab.nochim, "silva_nr99_v138.1_wSpecies_train_set.fa.gz", multithread=TRUE)
+taxa2 <- as.data.frame(taxa) %>% 
+  `row.names<-`(base::paste("ASV", seq(1:nrow(taxa)), sep = ""))
+
+DT::datatable(taxa2,options = list(scrollX = TRUE, autoWidth = TRUE))
+#Remove non_prokaryotic ASVs
+taxa2 <- taxa2 %>% filter(Family != "Mitochondria") %>% 
+  filter(Order != "Chloroplast")
+
+#Prepare for joining
+taxa3 <- taxa2 %>% mutate(ASVs = row.names(taxa2)) %>% 
+  dplyr::select(ASVs, everything())
+
+ASV_tbl2 <- ASV_tbl %>% mutate(ASVs=row.names(ASV_tbl)) %>%
+  dplyr::select(ASVs, everything())
+
+
+#Join taxa table this will be used for analysis outside of phyloseq
+taxa3 <- taxa3 %>% inner_join(ASV_tbl2, by = "ASVs")
+
+#taxa2 will be used for Phyloseq
+taxa2 <- taxa2 %>% filter(rownames(taxa2)%in%taxa3$ASVs)
+
+#Filter the original ASV table 
+ASV_tbl <- ASV_tbl %>% filter(row.names(ASV_tbl) %in% taxa3$ASVs)
+
+# get a table of relative abundance of taxa per sample
+#Since the samples are columns gotta use the sweep function rather than just divide
+
+taxa3[,(ncol(taxa2)+2):ncol(taxa3)] <- sweep(
+  taxa3[,(ncol(taxa2)+2):ncol(taxa3)],2,
+  colSums(taxa3[,(ncol(taxa2)+2):ncol(taxa3)]),'/')*100
+
+#Sanity check, do they sum to 100%
+colSums(taxa3[,(ncol(taxa2)+2):ncol(taxa3)])
+ASV_seqs[names(ASV_seqs)%in%ASV_tbl2$ASVs]
+writeXStringSet(ASV_seqs[names(ASV_seqs)%in%ASV_tbl2$ASVs], "mouse_ASVs.fa")
+
+#lets check that the file is ok
+
+readLines("mouse_ASVs.fa")[1:10]
+writeXStringSet(ASV_seqs[names(ASV_seqs)%in%ASV_tbl2$ASVs],"Firmicutes_ASVs.fa")
+writeXStringSet(ASV_seqs[names(ASV_seqs)%in%ASV_tbl2$ASVs],"Actinobacteria_ASVs.fa")

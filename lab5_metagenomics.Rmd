@@ -51,4 +51,12 @@ errF <- learnErrors(filtFs, multithread=T)
 errR <- learnErrors(filtRs, multithread=T)
 plotErrors(errR, nominalQ=TRUE)
 ```
+The results seen between forward and reverse reads are similar but the forward reads follow the red trendlines more closely
+
+QUESTION 3
+```{r}
+readLines("Firmicutes_ASVs.fa")[1:10]
+readLines("Actinobacteria_ASVs.fa")[1:10]
+```
+
 
