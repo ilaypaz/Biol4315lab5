@@ -9,22 +9,46 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+QUESTION 1
+```{r}
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
-
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
-
-```{r cars}
-summary(cars)
+lapply(c("dada2","phyloseq","vegan","tidyverse",
+         "Biostrings"), library, character.only = T)
+# All forward and reverse fastq file names have the exact format: SAMPLENAME_R1_001.fastq and SAMPLENAME_R2_001.fastq
+#Note the pattern
+data_dir <-"MiSeq_SOP"
+fnFs <- sort(list.files(data_dir, pattern="_R1_001.fastq", full.names = TRUE))
+fnRs <- sort(list.files(data_dir, pattern="_R2_001.fastq", full.names = TRUE))
+#basename removes the folder names
+sample.names <- stringr::str_split_fixed(basename(fnFs),"_",2)[,1]
+plotQualityProfile(fnFs[1:38])
+plotQualityProfile(fnRs[1:38])
 ```
 
-## Including Plots
+QUESTION 2
+```{r}
+filtFs <- file.path("filtered", paste0(sample.names, "_F_filt.fastq.gz"))
+names(filtFs) <- sample.names
+#R2
+filtRs <- file.path("filtered", paste0(sample.names, "_R_filt.fastq.gz"))
+names(filtRs) <- sample.names
+out <- filterAndTrim(fnFs, filtFs, fnRs, filtRs, truncLen=c(240,160),
+                     maxN=0, maxEE=c(2,2), truncQ = 2 ,rm.phix=TRUE,
+                     compress=TRUE, multithread = TRUE)
 
-You can also embed plots, for example:
+#Some reshuffling of the data, get percent of reads left per sample as well as absolute numbers
+out2 <- as.data.frame(out) %>% mutate(prop = (100*(reads.out/reads.in)))
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+# So far looks good
+head(out2)
+#Mean percent of seqs left
+mean(out2$prop)
+#Min percent of seqs left
+min(out2$prop)
+#But what's the sample with the lowest number of reads?
+min(out2$reads.out)
+errF <- learnErrors(filtFs, multithread=T)
+errR <- learnErrors(filtRs, multithread=T)
+plotErrors(errR, nominalQ=TRUE)
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
