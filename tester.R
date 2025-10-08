@@ -167,4 +167,60 @@ names(actino_seqs) <- paste(actino_ids, genus_actino)
 writeXStringSet(actino_seqs, "Actinobacteria_ASVs_identified.fa")
 actino_seqs
 
+unqs.mock <- seqtab.nochim["Mock",]
+unqs.mock <- sort(unqs.mock[unqs.mock>0], decreasing=TRUE) # Drop ASVs absent in the Mock
+cat("DADA2 inferred", length(unqs.mock), "sample sequences present in the Mock community.\n")
+mock.ref <- getSequences(file.path(data_dir, "HMP_MOCK.v35.fasta"))
+match.ref <- sum(sapply(names(unqs.mock), function(x) any(grepl(x, mock.ref))))
+cat("Of those,", sum(match.ref), "were exact matches to the expected reference sequences.\n")
+#lets see what it looks like
 
+mdta <- read.delim(base::paste(data_dir,"mouse.dpw.metadata", sep = "/" ))
+#Are the sample names similar to the sample names we have in the ASV table?
+length(mdta$group %in% colnames(ASV_tbl))
+#set the row names and massage the table
+
+mdta <- mdta %>% mutate(category = if_else(dpw > 100 , "Late","Early")) %>% 
+  mutate(gender = if_else(str_detect(group, "F"),"F","M")) %>%
+  mutate(subject = str_extract(str_split_fixed(group, "D", 2)[,1],"(\\d)+")) %>%
+  `row.names<-`(mdta$group)
+#Generating the phyloseq object
+ps <- phyloseq(otu_table(as.matrix(ASV_tbl), taxa_are_rows=T), 
+               sample_data(mdta), 
+               tax_table(as.matrix(taxa2)))
+
+ps <- merge_phyloseq(ps, ASV_seqs)
+
+ps
+#Lets calculate richness and diversity
+#Shannon and Simpson are diversity estimators, ACE is a richness estimator, observed is how many ASVs we have (198)
+rnd <- estimate_richness(
+  ps, measures=c("Observed", "ACE","Shannon", "Simpson")) %>% 
+  dplyr::select(-se.ACE)
+
+
+DT::datatable(rnd[1:2])
+#QUESTION4
+data.table::fwrite(rnd[, 1:2], "datatable_export.csv")
+rnd <- rnd %>% mutate(group = row.names(rnd))%>% inner_join(mdta, "group")
+#make a long table
+rndl <- rnd %>% gather("Estimator", "Value", 1:4) %>% 
+  mutate(rd = if_else(Estimator == "Observed" | Estimator == "ACE", 
+                      "Richness","Diversity"))
+
+ggplot(rndl, aes(x=dpw, y=Value, color = Estimator, fill= Estimator))+
+  geom_bar(stat = "identity", position = position_dodge())+
+  facet_grid(rd~category, scales = "free")
+#QUSTION 5
+
+library(ggplot2)
+library(RColorBrewer)
+
+cb_palette <- brewer.pal(n = length(unique(rndl$Estimator)), name = "Set2")
+
+ggplot(rndl, aes(x = dpw, y = Value, color = Estimator, fill = Estimator)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  facet_grid(rd ~ category, scales = "free") +
+  scale_color_manual(values = cb_palette) +
+  scale_fill_manual(values = cb_palette) +
+  theme_bw()
