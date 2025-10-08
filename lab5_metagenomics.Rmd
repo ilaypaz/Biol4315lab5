@@ -104,3 +104,131 @@ ASV 207 BLAST results it could be Adlercreutzia, Eggerthella,or Enteroscipio
  ![ASV 207 BLAST results it could be Adlercreutzia, Eggerthella,or 	Enteroscipio ](/Users/ipaz00/Desktop/asv207.png) 
  ASV 22 BLAST results, it could be any bacteria
 ![ASV 22 BLAST results, it could be any bacteria ](/Users/ipaz00/Desktop/asv22.png) 
+QUESTION 5
+```{r}
+library(dplyr)
+
+ASV_tbl <- as.data.frame(seqtab.nochim) %>% 
+  `colnames<-`(base::paste("ASV", seq(1:ncol(seqtab.nochim)), sep = ""))
+
+DT::datatable(ASV_tbl, options = list(scrollX = TRUE, autoWidth = TRUE))
+ASV_tbl <- as.data.frame(t(ASV_tbl[-nrow(ASV_tbl),]))
+
+#lets remove the ASVs that were only present in the mock communities
+
+ASV_tbl <- ASV_tbl %>% mutate(rs = rowSums(ASV_tbl)) %>% 
+  filter(rs > 0) %>% dplyr::select(-rs)
+#Using DNAStringSet from Biostrings to read the seqs 
+ASV_seqs <- DNAStringSet(base::colnames(seqtab.nochim) %>% 
+                           `names<-`(base::paste("ASV",seq(1:ncol(seqtab.nochim)),sep = "")))
+taxa <- assignTaxonomy(seqtab.nochim, "silva_nr99_v138.1_wSpecies_train_set.fa.gz", multithread=TRUE)
+taxa2 <- as.data.frame(taxa) %>% 
+  `row.names<-`(base::paste("ASV", seq(1:nrow(taxa)), sep = ""))
+
+DT::datatable(taxa2,options = list(scrollX = TRUE, autoWidth = TRUE))
+#Remove non_prokaryotic ASVs
+taxa2 <- taxa2 %>% filter(Family != "Mitochondria") %>% 
+  filter(Order != "Chloroplast")
+
+#Prepare for joining
+taxa3 <- taxa2 %>% mutate(ASVs = row.names(taxa2)) %>% 
+  dplyr::select(ASVs, everything())
+
+ASV_tbl2 <- ASV_tbl %>% mutate(ASVs=row.names(ASV_tbl)) %>%
+  dplyr::select(ASVs, everything())
+
+
+#Join taxa table this will be used for analysis outside of phyloseq
+taxa3 <- taxa3 %>% inner_join(ASV_tbl2, by = "ASVs")
+
+#taxa2 will be used for Phyloseq
+taxa2 <- taxa2 %>% filter(rownames(taxa2)%in%taxa3$ASVs)
+ASV_tbl <- as.data.frame(seqtab.nochim) %>% 
+  `colnames<-`(base::paste("ASV", seq(1:ncol(seqtab.nochim)), sep = ""))
+
+DT::datatable(ASV_tbl, options = list(scrollX = TRUE, autoWidth = TRUE))
+ASV_tbl <- as.data.frame(t(ASV_tbl[-nrow(ASV_tbl),]))
+
+#lets remove the ASVs that were only present in the mock communities
+
+ASV_tbl <- ASV_tbl %>% mutate(rs = rowSums(.)) %>% filter(rs > 0) %>% select(-rs)
+ASV_tbl <- ASV_tbl %>% filter(row.names(.) %in% taxa3$ASVs)
+unqs.mock <- seqtab.nochim["Mock",]
+unqs.mock <- sort(unqs.mock[unqs.mock>0], decreasing=TRUE) # Drop ASVs absent in the Mock
+cat("DADA2 inferred", length(unqs.mock), "sample sequences present in the Mock community.\n")
+mock.ref <- getSequences(file.path(data_dir, "HMP_MOCK.v35.fasta"))
+match.ref <- sum(sapply(names(unqs.mock), function(x) any(grepl(x, mock.ref))))
+cat("Of those,", sum(match.ref), "were exact matches to the expected reference sequences.\n")
+#lets see what it looks like
+
+mdta <- read.delim(base::paste(data_dir,"mouse.dpw.metadata", sep = "/" ))
+#Are the sample names similar to the sample names we have in the ASV table?
+length(mdta$group %in% colnames(ASV_tbl))
+#set the row names and massage the table
+
+mdta <- mdta %>% mutate(category = if_else(dpw > 100 , "Late","Early")) %>% 
+  mutate(gender = if_else(str_detect(group, "F"),"F","M")) %>%
+  mutate(subject = str_extract(str_split_fixed(group, "D", 2)[,1],"(\\d)+")) %>%
+  `row.names<-`(mdta$group)
+#Generating the phyloseq object
+ps <- phyloseq(otu_table(as.matrix(ASV_tbl), taxa_are_rows=T), 
+               sample_data(mdta), 
+               tax_table(as.matrix(taxa2)))
+
+ps <- merge_phyloseq(ps, ASV_seqs)
+
+rnd <- estimate_richness(
+  ps, measures=c("Observed", "ACE","Shannon", "Simpson")) %>% 
+  dplyr::select(-se.ACE)
+rnd <- rnd %>% mutate(group = row.names(rnd))%>% inner_join(mdta, "group")
+#make a long table
+rndl <- rnd %>% gather("Estimator", "Value", 1:4) %>% 
+  mutate(rd = if_else(Estimator == "Observed" | Estimator == "ACE", 
+                      "Richness","Diversity"))
+library(ggplot2)
+library(RColorBrewer)
+
+cb_palette <- brewer.pal(n = length(unique(rndl$Estimator)), name = "Set2")
+
+ggplot(rndl, aes(x = dpw, y = Value, color = Estimator, fill = Estimator)) +
+  geom_bar(stat = "identity", position = position_dodge()) +
+  facet_grid(rd ~ category, scales = "free") +
+  scale_color_manual(values = cb_palette) +
+  scale_fill_manual(values = cb_palette) +
+  theme_bw()
+# Log transforming the data prior to using bray curtis so that overly abundant ASVs will not skew the results
+ps.prop <- transform_sample_counts(ps, function(otu) log1p(otu))
+#Perform the ordination
+ord.nmds.bray <- ordinate(ps.prop, method="NMDS", distance="bray")
+plot_ordination(ps.prop, ord.nmds.bray, color="category", title="Bray NMDS")
+top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
+ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU)*100)
+ps.top20 <- prune_taxa(top20, ps.top20)
+plot_bar(ps.top20, x="dpw", fill="Family") + facet_wrap(~category, scales="free_x") +
+  ylab("Relative abundance (% of seqs/sample)")
+fam <- as.data.frame(taxa3 %>% dplyr::select(Family, where(is.numeric)) %>% 
+                       group_by(Family) %>% summarise_all(sum))
+
+head(fam)
+#Does it sum to 100%
+colSums(fam[,2:ncol(fam)])
+fam_o <- fam
+
+fam[2:ncol(fam)][fam[2:ncol(fam)]<1] <- 0
+fam_o[2:ncol(fam_o)][fam[2:ncol(fam_o)]>1] <- 0
+
+Others <-colSums(fam_o[2:ncol(fam_o)])
+
+fam[nrow(fam)+1,2:ncol(fam)] <- Others
+fam[nrow(fam),1] <- "Others"
+
+tail(fam)
+#Get a long table needed for ggplot2
+fam_l <- fam %>% gather("group","relab",2:ncol(fam)) %>%
+  inner_join(mdta,"group")
+txplot <- ggplot(fam_l, aes(x = dpw, y=Family, size = relab))+ 
+  geom_point()+
+  facet_wrap(~category, scales = "free_x")
+txplot
+```
+
