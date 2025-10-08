@@ -94,8 +94,13 @@ names(actino_seqs) <- paste(actino_ids, genus_actino)
 writeXStringSet(actino_seqs, "Actinobacteria_ASVs_identified.fa")
 actino_seqs
 ```
-ASV 22 (FIRMICUTES) AND ASV 207 (ACTINOBACTERIA) UNIDENTIFIED WILL BE BLASTED 
-ASV 207 BLAST results it could be Adlercreutzia, Eggerthella,or 	Enteroscipio
+ASV 22 (FIRMICUTES) AND ASV 207 (ACTINOBACTERIA) UNIDENTIFIED WILL BE BLASTED
+
+
+
+
+
+ASV 207 BLAST results it could be Adlercreutzia, Eggerthella,or Enteroscipio
  ![ASV 207 BLAST results it could be Adlercreutzia, Eggerthella,or 	Enteroscipio ](/Users/ipaz00/Desktop/asv207.png) 
  ASV 22 BLAST results, it could be any bacteria
 ![ASV 22 BLAST results, it could be any bacteria ](/Users/ipaz00/Desktop/asv22.png) 

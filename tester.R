@@ -224,3 +224,37 @@ ggplot(rndl, aes(x = dpw, y = Value, color = Estimator, fill = Estimator)) +
   scale_color_manual(values = cb_palette) +
   scale_fill_manual(values = cb_palette) +
   theme_bw()
+# Log transforming the data prior to using bray curtis so that overly abundant ASVs will not skew the results
+ps.prop <- transform_sample_counts(ps, function(otu) log1p(otu))
+#Perform the ordination
+ord.nmds.bray <- ordinate(ps.prop, method="NMDS", distance="bray")
+plot_ordination(ps.prop, ord.nmds.bray, color="category", title="Bray NMDS")
+top20 <- names(sort(taxa_sums(ps), decreasing=TRUE))[1:20]
+ps.top20 <- transform_sample_counts(ps, function(OTU) OTU/sum(OTU)*100)
+ps.top20 <- prune_taxa(top20, ps.top20)
+plot_bar(ps.top20, x="dpw", fill="Family") + facet_wrap(~category, scales="free_x") +
+  ylab("Relative abundance (% of seqs/sample)")
+fam <- as.data.frame(taxa3 %>% dplyr::select(Family, where(is.numeric)) %>% 
+                       group_by(Family) %>% summarise_all(sum))
+
+head(fam)
+#Does it sum to 100%
+colSums(fam[,2:ncol(fam)])
+fam_o <- fam
+
+fam[2:ncol(fam)][fam[2:ncol(fam)]<1] <- 0
+fam_o[2:ncol(fam_o)][fam[2:ncol(fam_o)]>1] <- 0
+
+Others <-colSums(fam_o[2:ncol(fam_o)])
+
+fam[nrow(fam)+1,2:ncol(fam)] <- Others
+fam[nrow(fam),1] <- "Others"
+
+tail(fam)
+#Get a long table needed for ggplot2
+fam_l <- fam %>% gather("group","relab",2:ncol(fam)) %>%
+  inner_join(mdta,"group")
+txplot <- ggplot(fam_l, aes(x = dpw, y=Family, size = relab))+ 
+  geom_point()+
+  facet_wrap(~category, scales = "free_x")
+txplot
