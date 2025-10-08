@@ -151,14 +151,20 @@ writeXStringSet(ASV_seqs[names(ASV_seqs)%in%ASV_tbl2$ASVs], "mouse_ASVs.fa")
 
 readLines("mouse_ASVs.fa")[1:10]
 
-firmicutes_ids <- rownames(taxa2[taxa2$Phylum == "Firmicutes", ])
+# Firmicutes
+firmicutes_ids <- rownames(taxa2)[taxa2$Phylum == "Firmicutes"]
 firmicutes_seqs <- ASV_seqs[names(ASV_seqs) %in% firmicutes_ids]
+genus <- as.character(taxa2[firmicutes_ids, "Genus"])
+names(firmicutes_seqs) <- paste(firmicutes_ids, genus)
 writeXStringSet(firmicutes_seqs, "Firmicutes_ASVs_identified.fa")
 head(firmicutes_seqs)
-#actinobacteria
-actino_ids <- rownames(taxa2[taxa2$Phylum %in% c("Actinobacteria", "Actinobacteriota"), ])
+
+# Actinobacteria
+actino_ids <- rownames(taxa2)[taxa2$Phylum %in% c("Actinobacteria", "Actinobacteriota")]
 actino_seqs <- ASV_seqs[names(ASV_seqs) %in% actino_ids]
+genus_actino <- as.character(taxa2[actino_ids, "Genus"])
+names(actino_seqs) <- paste(actino_ids, genus_actino)
 writeXStringSet(actino_seqs, "Actinobacteria_ASVs_identified.fa")
-head(actino_seqs)
+actino_seqs
 
 

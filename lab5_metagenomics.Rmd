@@ -55,12 +55,46 @@ The results seen between forward and reverse reads are similar but the forward r
 
 QUESTION 3
 ```{r}
-readLines("Firmicutes_ASVs.fa")[1:10]
-readLines("Actinobacteria_ASVs.fa")[1:10]
+dadaFs <- dada(filtFs, err=errF, multithread = TRUE)
+dadaRs <- dada(filtRs, err=errF, multithread = TRUE)
+dadaFs[[1]]
+mergers <- mergePairs(dadaFs, filtFs, dadaRs, filtRs, verbose=TRUE)
+
+# Inspect the merger data.frame from the first sample
+DT::datatable(mergers$F3D0,options = list(scrollX = TRUE, autoWidth = TRUE))
+seqtab <- makeSequenceTable(mergers)
+
+dim(seqtab)
+table(nchar(getSequences(seqtab)))
+seqtab.nochim <- removeBimeraDenovo(seqtab, method="consensus", multithread=F, verbose=TRUE)
+#Proportion ASVs were removed due to chimeras?
+100-(dim(seqtab.nochim)[2]/dim(seqtab)[2]*100)
+sum(seqtab.nochim)/sum(seqtab)*100
+ASV_seqs <- DNAStringSet(base::colnames(seqtab.nochim) %>% 
+                           `names<-`(base::paste("ASV",seq(1:ncol(seqtab.nochim)),sep = "")))
+
+taxa <- assignTaxonomy(seqtab.nochim, "silva_nr99_v138.1_wSpecies_train_set.fa.gz", multithread=TRUE)
+taxa2 <- as.data.frame(taxa) %>% 
+  `row.names<-`(base::paste("ASV", seq(1:nrow(taxa)), sep = ""))
+taxa2 <- taxa2 %>% filter(Family != "Mitochondria") %>% 
+  filter(Order != "Chloroplast")
+# Firmicutes
+firmicutes_ids <- rownames(taxa2)[taxa2$Phylum == "Firmicutes"]
+firmicutes_seqs <- ASV_seqs[names(ASV_seqs) %in% firmicutes_ids]
+genus <- as.character(taxa2[firmicutes_ids, "Genus"])
+names(firmicutes_seqs) <- paste(firmicutes_ids, genus)
+writeXStringSet(firmicutes_seqs, "Firmicutes_ASVs_identified.fa")
+head(firmicutes_seqs)
+
+# Actinobacteria
+actino_ids <- rownames(taxa2)[taxa2$Phylum %in% c("Actinobacteria", "Actinobacteriota")]
+actino_seqs <- ASV_seqs[names(ASV_seqs) %in% actino_ids]
+genus_actino <- as.character(taxa2[actino_ids, "Genus"])
+names(actino_seqs) <- paste(actino_ids, genus_actino)
+writeXStringSet(actino_seqs, "Actinobacteria_ASVs_identified.fa")
+actino_seqs
 ```
- ![BLAST nr database query for Actinobacteria part1](/Users/ipaz00/Desktop/scnsht.png) 
- ![BLAST nr database query for Actinobacteria part2 sorted by query cover](/Users/ipaz00/Desktop/drougth.png) 
- ![BLAST nr database query for Firmicutes part1](/Users/ipaz00/Desktop/g.png)
- 
- 
- ![BLAST nr database query for Firmicutes part2 sorted by e value](/Users/ipaz00/Desktop/gh.png)
+ASV 22 (FIRMICUTES) AND ASV 207 (ACTINOBACTERIA) UNIDENTIFIED WILL BE BLASTED 
+
+ ![ASV 207 BLAST results it could be Adlercreutzia, Eggerthella,or 	Enteroscipio ](/Users/ipaz00/Desktop/asv207.png) 
+![ASV 22 BLAST results, it could be any bacteria ](/Users/ipaz00/Desktop/asv22.png) 
